@@ -1,48 +1,114 @@
-# GPR Text Pipeline (v5)
+# README  
+## Project: CEO Perceptions of Geopolitical Risk (GPR)  
+### Textual Analysis of Earnings Call Management Presentations
 
-## What this does
-Constructs text-based measures of CEO geopolitical risk (GPR) perceptions from Thomson StreetEvents earnings-call transcripts, using only the **management presentation** section (excluding Q&A).
+---
 
-## Required inputs
-- Folder of extracted transcripts: `*_T.xml`
-- `GPR dictionary.csv` (updated GPR keyword dictionary from Prof Ayyagari)
-- `country_variants.csv` (country list with variants)
+## 1. Objective
+The goal of this project is to construct text-based measures of CEOs’ perceived geopolitical risk (GPR) from earnings call transcripts. The analysis focuses exclusively on **management presentations** (CEO, CFO, COO, top executives), excluding Q&A sections and analyst language. The outputs include sentence-level, firm–country–year, and firm–year GPR measures for the period 2016–2019.
 
-## Core methodology
-1. Parse each `*_T.xml` transcript, extract management presentation text, clean, and split into sentences.
-2. Identify **GPR seed sentences** using the GPR keyword dictionary.
-3. Expand each seed into a **±3 sentence context window**, and mark the **union** of all windows as **GPR sentences** (overlaps are automatically deduplicated).
-4. Search for country mentions **only within GPR sentences**, using the country-variants lexicon.
-5. Aggregate sentence and word counts to produce firm–country–year and firm–year measures.
+---
 
-## Outputs (CSV)
-- `sentence_level.csv`  
-  Every management-presentation sentence with GPR flags, matched terms, and countries mentioned (countries populated only for GPR-window sentences).
-- `gpr_sentences_country.csv`  
-  GPR sentence × country pairs.
-- `firm_country_year.csv`  
-  `I_GPR_ict`, `Frac_GPR_ict`, `Word_GPR_ict`.
-- `firm_year.csv`  
-  `I_GPR_it`, `Frac_GPR_it`, `Word_GPR_it` (also produces a filtered `firm_year_2015_2017.csv` if the constants are set that way).
+## 2. Input Files
+The pipeline uses the following inputs:
 
-## Traceability fields
-- `sentence_index` is **0-based** within each transcript.
-- `sentence_id` is `{file_id}_S00001`, `{file_id}_S00002`, ...
+- Earnings call transcripts (`*_T.xml`)
+- GPR keyword dictionary (updated version provided by Prof. Ayyagari)
+- Country list with name variants (e.g., “U.S.”, “United States”, “America”)
 
-## How to run in Colab
-1. Unzip transcripts into a folder, e.g. `/content/2016/`
-2. Put `GPR dictionary.csv` and `country_variants.csv` in `/content/`
-3. Open `gpr_text_pipeline_v5.py` and set the top-of-file constants:
-   - `XML_DIR` to your transcript folder (e.g. `/content/2016/`)
-   - `GPR_DICT_FILE` to `/content/GPR dictionary.csv`
-   - `COUNTRY_DICT_FILE` to `/content/country_variants.csv`
-   - `OUTPUT_DIR` to where you want the outputs saved
-4. Run:
+No regressions are run at this stage.
 
-```python
-!python /content/gpr_text_pipeline_v5.py
-```
+---
 
-## Notes
-- This version implements the **±3 sentence window** rule exactly as specified in the RA instructions.
-- Sentiment is intentionally not implemented yet.
+## 3. Text Pre-Processing
+For each transcript:
+
+1. Parse the XML file and extract the **management presentation text only**.
+2. Clean text (remove markup, normalize spacing).
+3. Split the presentation into sentences.
+4. Compute transcript-level totals:
+   - Total number of sentences  
+   - Total number of words  
+
+These totals are used to normalize GPR measures.
+
+---
+
+## 4. Identifying GPR Discussion Blocks (±3 Sentences)
+1. **Anchor sentences** are identified as sentences containing at least one GPR keyword from the dictionary.
+2. For each anchor sentence, a **±3 sentence context window** is constructed.
+3. All sentences within this 7-sentence window are labeled as **GPR discussion-block sentences**.
+4. Overlapping windows are deduplicated so that each sentence appears only once.
+
+Two indicators are retained:
+
+- `is_gpr_anchor`: sentence contains a GPR keyword  
+- `is_gpr_block`: sentence falls within a ±3 GPR discussion block  
+
+---
+
+## 5. Identifying Countries in GPR Blocks
+Country mentions are identified using a country-lexicon approach:
+
+- Country names and variants are searched **only within GPR discussion-block sentences**
+- A sentence may reference multiple countries
+- Countries do **not** need to appear in the same sentence as the GPR keyword; appearing anywhere in the ±3 sentence block qualifies
+
+This produces a **sentence–country** dataset.
+
+---
+
+## 6. Constructing Firm–Country–Year Measures
+For each firm *i*, country *c*, and year *t*, the following measures are constructed:
+
+- **I(GPR_ict)**  
+  Indicator equal to 1 if any GPR discussion block references country *c*.
+
+- **Frac(GPR_ict)**  
+(# GPR sentences referencing country c) / (total sentences in presentation)
+
+scss
+
+- **Word(GPR_ict)**  
+
+(# words in GPR sentences referencing country c) / (total words in presentation)
+
+yaml
+
+---
+
+## 7. Constructing Firm–Year Measures (Non-Country-Specific)
+Using all GPR discussion-block sentences (regardless of country mentions):
+
+- **I(GPR_it)**  
+Indicator equal to 1 if the firm mentions any GPR in year *t*.
+
+- **Frac(GPR_it)**  
+(# GPR sentences) / (total sentences in presentation)
+
+scss
+
+- **Word(GPR_it)**  
+(# words in GPR sentences) / (total words in presentation)
+
+yaml
+
+---
+
+## 8. Outputs
+The pipeline produces four datasets:
+
+| File | Description |
+|------|------------|
+| `sentence_level.csv` | Every sentence with GPR anchor/block flags, matched terms, and country mentions |
+| `gpr_sentences_country.csv` | GPR sentences × country pairs |
+| `firm_country_year.csv` | Country-specific GPR measures |
+| `firm_year.csv` | Overall firm-year GPR measures |
+
+---
+
+## 9. Notes
+- Sentiment analysis is **not implemented yet** and will be added in a later stage.
+- The same pipeline is applied uniformly across years (2016–2019).
+- The code is designed to be directly reusable for the larger transcript universe or restricted to the smaller sample firms.
+
